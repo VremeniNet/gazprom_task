@@ -2,7 +2,7 @@ import { type FormEvent, type ChangeEvent, useState } from 'react'
 import { Button } from '@consta/uikit/Button'
 import { TextField } from '@consta/uikit/TextField'
 
-import { getPosts, getUsers, GoRestApiError } from './api/gorest'
+import { getPosts, getUser, getUsers, GoRestApiError } from './api/gorest'
 import type { Pagination, Post, User } from './types/gorest'
 
 import './App.css'
@@ -11,6 +11,15 @@ const PER_PAGE_OPTIONS = [10, 25, 50] as const
 
 type PerPageOption = (typeof PER_PAGE_OPTIONS)[number]
 type ActiveSection = 'users' | 'posts'
+
+const getUserNameParts = (name: string) => {
+	const [firstName, ...lastNameParts] = name.trim().split(/\s+/)
+
+	return {
+		firstName: firstName || '—',
+		lastName: lastNameParts.join(' ') || '—',
+	}
+}
 
 function App() {
 	const [token, setToken] = useState('')
@@ -36,6 +45,11 @@ function App() {
 	const [usersPerPage, setUsersPerPage] = useState<PerPageOption>(10)
 	const [isUsersLoading, setIsUsersLoading] = useState(false)
 	const [usersError, setUsersError] = useState('')
+
+	const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
+	const [selectedUser, setSelectedUser] = useState<User | null>(null)
+	const [isUserDetailsLoading, setIsUserDetailsLoading] = useState(false)
+	const [userDetailsError, setUserDetailsError] = useState('')
 
 	const loadUsers = async (
 		tokenForRequest: string,
@@ -63,6 +77,33 @@ function App() {
 			setUsersError('Не удалось загрузить пользователей. Попробуйте позже.')
 		} finally {
 			setIsUsersLoading(false)
+		}
+	}
+
+	const loadUserDetails = async (tokenForRequest: string, userId: number) => {
+		setSelectedUserId(userId)
+		setSelectedUser(null)
+		setIsUserDetailsLoading(true)
+		setUserDetailsError('')
+
+		try {
+			const result = await getUser({
+				token: tokenForRequest,
+				id: userId,
+			})
+
+			setSelectedUser(result.data)
+		} catch (error) {
+			if (error instanceof GoRestApiError) {
+				setUserDetailsError(error.message)
+				return
+			}
+
+			setUserDetailsError(
+				'Не удалось загрузить пользователя. Попробуйте позже.',
+			)
+		} finally {
+			setIsUserDetailsLoading(false)
 		}
 	}
 
@@ -132,6 +173,9 @@ function App() {
 		setPostsPagination(null)
 		setPostsPage(1)
 		setPostsError('')
+		setSelectedUserId(null)
+		setSelectedUser(null)
+		setUserDetailsError('')
 	}
 
 	const handleUsersPerPageChange = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -168,6 +212,18 @@ function App() {
 		}
 	}
 
+	const handleUserRowClick = (userId: number) => {
+		if (accessToken) {
+			void loadUserDetails(accessToken, userId)
+		}
+	}
+
+	const handleBackToUsersList = () => {
+		setSelectedUserId(null)
+		setSelectedUser(null)
+		setUserDetailsError('')
+	}
+
 	const usersTotalPages = usersPagination?.pages ?? 1
 	const canGoToPreviousUsersPage = usersPage > 1 && !isUsersLoading
 	const canGoToNextUsersPage = usersPage < usersTotalPages && !isUsersLoading
@@ -196,251 +252,380 @@ function App() {
 							onClick={handleResetToken}
 						/>
 					</header>
-
-					<div className='section-switch'>
-						<Button
-							label='Пользователи'
-							view={activeSection === 'users' ? 'primary' : 'secondary'}
-							onClick={() => handleActiveSectionChange('users')}
-						/>
-
-						<Button
-							label='Посты'
-							view={activeSection === 'posts' ? 'primary' : 'secondary'}
-							onClick={() => handleActiveSectionChange('posts')}
-						/>
-					</div>
-
-					{activeSection === 'users' ? (
-						<section className='list-card'>
-							<div className='list-card__header'>
+					{selectedUserId ? (
+						<section className='details-card'>
+							<div className='details-card__header'>
 								<div>
-									<h2 className='list-card__title'>Список пользователей</h2>
-									<p className='list-card__description'>
-										Имя, фамилия, email и статус пользователя.
-									</p>
+									<p className='app__eyebrow'>Карточка пользователя</p>
+									<h2 className='details-card__title'>Детали пользователя</h2>
 								</div>
 
-								<label className='select-field'>
-									<span className='select-field__label'>На странице</span>
-									<select
-										className='select-field__control'
-										value={usersPerPage}
-										onChange={handleUsersPerPageChange}
-										disabled={isUsersLoading}
-									>
-										{PER_PAGE_OPTIONS.map(option => (
-											<option key={option} value={option}>
-												{option}
-											</option>
-										))}
-									</select>
-								</label>
+								<Button
+									label='Назад к списку'
+									view='secondary'
+									onClick={handleBackToUsersList}
+								/>
 							</div>
 
-							{usersError ? (
+							{isUserDetailsLoading ? (
+								<div className='state-message'>Загружаем пользователя...</div>
+							) : null}
+
+							{userDetailsError ? (
 								<div className='state-message state-message--error'>
-									<p>{usersError}</p>
+									<p>{userDetailsError}</p>
 									<Button
 										label='Повторить'
 										view='primary'
-										onClick={handleRetryUsersLoading}
+										onClick={() => {
+											void loadUserDetails(accessToken, selectedUserId)
+										}}
 									/>
 								</div>
 							) : null}
 
-							{!usersError && isUsersLoading && users.length === 0 ? (
-								<div className='state-message'>Загружаем пользователей...</div>
-							) : null}
-
-							{!usersError && !isUsersLoading && users.length === 0 ? (
-								<div className='state-message'>Пользователи не найдены.</div>
-							) : null}
-
-							{!usersError && users.length > 0 ? (
-								<>
-									<div className='table-wrapper'>
-										<table className='data-table'>
-											<thead>
-												<tr>
-													<th>Имя</th>
-													<th>Email</th>
-													<th>Пол</th>
-													<th>Статус</th>
-												</tr>
-											</thead>
-
-											<tbody>
-												{users.map(user => (
-													<tr key={user.id}>
-														<td>{user.name || '—'}</td>
-														<td>{user.email || '—'}</td>
-														<td>
-															{user.gender === 'male' ? 'Мужской' : 'Женский'}
-														</td>
-														<td>
-															<span
-																className={`status-badge status-badge--${user.status}`}
-															>
-																{user.status === 'active'
-																	? 'Активен'
-																	: 'Неактивен'}
-															</span>
-														</td>
-													</tr>
-												))}
-											</tbody>
-										</table>
+							{selectedUser && !isUserDetailsLoading && !userDetailsError ? (
+								<div className='details-grid'>
+									<div className='details-field'>
+										<span className='details-field__label'>ID</span>
+										<strong className='details-field__value'>
+											{selectedUser.id}
+										</strong>
 									</div>
 
-									<footer className='pagination'>
-										<p className='pagination__info'>
-											Страница {usersPage} из {usersTotalPages}. Всего:{' '}
-											{usersPagination?.total ?? '—'}
-											{isUsersLoading ? ' · обновляем...' : ''}
-										</p>
+									<div className='details-field'>
+										<span className='details-field__label'>Имя</span>
+										<strong className='details-field__value'>
+											{getUserNameParts(selectedUser.name).firstName}
+										</strong>
+									</div>
 
-										<div className='pagination__actions'>
-											<Button
-												label='Предыдущая'
-												view='secondary'
-												disabled={!canGoToPreviousUsersPage}
-												onClick={() => {
-													const nextPage = Math.max(1, usersPage - 1)
+									<div className='details-field'>
+										<span className='details-field__label'>Фамилия</span>
+										<strong className='details-field__value'>
+											{getUserNameParts(selectedUser.name).lastName}
+										</strong>
+									</div>
 
-													setUsersPage(nextPage)
-													void loadUsers(accessToken, nextPage, usersPerPage)
-												}}
-											/>
+									<div className='details-field'>
+										<span className='details-field__label'>Email</span>
+										<strong className='details-field__value'>
+											{selectedUser.email}
+										</strong>
+									</div>
 
-											<Button
-												label='Следующая'
-												view='primary'
-												disabled={!canGoToNextUsersPage}
-												onClick={() => {
-													const nextPage = Math.min(
-														usersTotalPages,
-														usersPage + 1,
-													)
+									<div className='details-field'>
+										<span className='details-field__label'>Пол</span>
+										<strong className='details-field__value'>
+											{selectedUser.gender === 'male' ? 'Мужской' : 'Женский'}
+										</strong>
+									</div>
 
-													setUsersPage(nextPage)
-													void loadUsers(accessToken, nextPage, usersPerPage)
-												}}
-											/>
-										</div>
-									</footer>
-								</>
+									<div className='details-field'>
+										<span className='details-field__label'>Статус</span>
+										<span
+											className={`status-badge status-badge--${selectedUser.status}`}
+										>
+											{selectedUser.status === 'active'
+												? 'Активен'
+												: 'Неактивен'}
+										</span>
+									</div>
+								</div>
 							) : null}
 						</section>
-					) : null}
-					{activeSection === 'posts' ? (
-						<section className='list-card'>
-							<div className='list-card__header'>
-								<div>
-									<h2 className='list-card__title'>Список постов</h2>
-									<p className='list-card__description'>
-										ID и заголовок поста из GoREST API.
-									</p>
-								</div>
+					) : (
+						<>
+							<div className='section-switch'>
+								<Button
+									label='Пользователи'
+									view={activeSection === 'users' ? 'primary' : 'secondary'}
+									onClick={() => handleActiveSectionChange('users')}
+								/>
 
-								<label className='select-field'>
-									<span className='select-field__label'>На странице</span>
-									<select
-										className='select-field__control'
-										value={postsPerPage}
-										onChange={handlePostsPerPageChange}
-										disabled={isPostsLoading}
-									>
-										{PER_PAGE_OPTIONS.map(option => (
-											<option key={option} value={option}>
-												{option}
-											</option>
-										))}
-									</select>
-								</label>
+								<Button
+									label='Посты'
+									view={activeSection === 'posts' ? 'primary' : 'secondary'}
+									onClick={() => handleActiveSectionChange('posts')}
+								/>
 							</div>
 
-							{postsError ? (
-								<div className='state-message state-message--error'>
-									<p>{postsError}</p>
-									<Button
-										label='Повторить'
-										view='primary'
-										onClick={handleRetryPostsLoading}
-									/>
-								</div>
-							) : null}
+							{activeSection === 'users' ? (
+								<section className='list-card'>
+									<div className='list-card__header'>
+										<div>
+											<h2 className='list-card__title'>Список пользователей</h2>
+											<p className='list-card__description'>
+												Имя, фамилия, email и статус пользователя.
+											</p>
+										</div>
 
-							{!postsError && isPostsLoading && posts.length === 0 ? (
-								<div className='state-message'>Загружаем посты...</div>
-							) : null}
-
-							{!postsError && !isPostsLoading && posts.length === 0 ? (
-								<div className='state-message'>Посты не найдены.</div>
-							) : null}
-
-							{!postsError && posts.length > 0 ? (
-								<>
-									<div className='table-wrapper'>
-										<table className='data-table'>
-											<thead>
-												<tr>
-													<th>ID</th>
-													<th>Заголовок</th>
-												</tr>
-											</thead>
-
-											<tbody>
-												{posts.map(post => (
-													<tr key={post.id}>
-														<td>{post.id}</td>
-														<td>{post.title || '—'}</td>
-													</tr>
+										<label className='select-field'>
+											<span className='select-field__label'>На странице</span>
+											<select
+												className='select-field__control'
+												value={usersPerPage}
+												onChange={handleUsersPerPageChange}
+												disabled={isUsersLoading}
+											>
+												{PER_PAGE_OPTIONS.map(option => (
+													<option key={option} value={option}>
+														{option}
+													</option>
 												))}
-											</tbody>
-										</table>
+											</select>
+										</label>
 									</div>
 
-									<footer className='pagination'>
-										<p className='pagination__info'>
-											Страница {postsPage} из {postsTotalPages}. Всего:{' '}
-											{postsPagination?.total ?? '—'}
-											{isPostsLoading ? ' · обновляем...' : ''}
-										</p>
-
-										<div className='pagination__actions'>
+									{usersError ? (
+										<div className='state-message state-message--error'>
+											<p>{usersError}</p>
 											<Button
-												label='Предыдущая'
-												view='secondary'
-												disabled={!canGoToPreviousPostsPage}
-												onClick={() => {
-													const nextPage = Math.max(1, postsPage - 1)
-
-													setPostsPage(nextPage)
-													void loadPosts(accessToken, nextPage, postsPerPage)
-												}}
-											/>
-
-											<Button
-												label='Следующая'
+												label='Повторить'
 												view='primary'
-												disabled={!canGoToNextPostsPage}
-												onClick={() => {
-													const nextPage = Math.min(
-														postsTotalPages,
-														postsPage + 1,
-													)
-
-													setPostsPage(nextPage)
-													void loadPosts(accessToken, nextPage, postsPerPage)
-												}}
+												onClick={handleRetryUsersLoading}
 											/>
 										</div>
-									</footer>
-								</>
+									) : null}
+
+									{!usersError && isUsersLoading && users.length === 0 ? (
+										<div className='state-message'>
+											Загружаем пользователей...
+										</div>
+									) : null}
+
+									{!usersError && !isUsersLoading && users.length === 0 ? (
+										<div className='state-message'>
+											Пользователи не найдены.
+										</div>
+									) : null}
+
+									{!usersError && users.length > 0 ? (
+										<>
+											<div className='table-wrapper'>
+												<table className='data-table'>
+													<thead>
+														<tr>
+															<th>Имя</th>
+															<th>Фамилия</th>
+															<th>Email</th>
+															<th>Пол</th>
+															<th>Статус</th>
+														</tr>
+													</thead>
+
+													<tbody>
+														{users.map(user => {
+															const { firstName, lastName } = getUserNameParts(
+																user.name,
+															)
+
+															return (
+																<tr
+																	key={user.id}
+																	className='data-table__row data-table__row--clickable'
+																	tabIndex={0}
+																	onClick={() => handleUserRowClick(user.id)}
+																	onKeyDown={event => {
+																		if (
+																			event.key === 'Enter' ||
+																			event.key === ' '
+																		) {
+																			event.preventDefault()
+																			handleUserRowClick(user.id)
+																		}
+																	}}
+																>
+																	<td>{firstName}</td>
+																	<td>{lastName}</td>
+																	<td>{user.email || '—'}</td>
+																	<td>
+																		{user.gender === 'male'
+																			? 'Мужской'
+																			: 'Женский'}
+																	</td>
+																	<td>
+																		<span
+																			className={`status-badge status-badge--${user.status}`}
+																		>
+																			{user.status === 'active'
+																				? 'Активен'
+																				: 'Неактивен'}
+																		</span>
+																	</td>
+																</tr>
+															)
+														})}
+													</tbody>
+												</table>
+											</div>
+
+											<footer className='pagination'>
+												<p className='pagination__info'>
+													Страница {usersPage} из {usersTotalPages}. Всего:{' '}
+													{usersPagination?.total ?? '—'}
+													{isUsersLoading ? ' · обновляем...' : ''}
+												</p>
+
+												<div className='pagination__actions'>
+													<Button
+														label='Предыдущая'
+														view='secondary'
+														disabled={!canGoToPreviousUsersPage}
+														onClick={() => {
+															const nextPage = Math.max(1, usersPage - 1)
+
+															setUsersPage(nextPage)
+															void loadUsers(
+																accessToken,
+																nextPage,
+																usersPerPage,
+															)
+														}}
+													/>
+
+													<Button
+														label='Следующая'
+														view='primary'
+														disabled={!canGoToNextUsersPage}
+														onClick={() => {
+															const nextPage = Math.min(
+																usersTotalPages,
+																usersPage + 1,
+															)
+
+															setUsersPage(nextPage)
+															void loadUsers(
+																accessToken,
+																nextPage,
+																usersPerPage,
+															)
+														}}
+													/>
+												</div>
+											</footer>
+										</>
+									) : null}
+								</section>
 							) : null}
-						</section>
-					) : null}
+							{activeSection === 'posts' ? (
+								<section className='list-card'>
+									<div className='list-card__header'>
+										<div>
+											<h2 className='list-card__title'>Список постов</h2>
+											<p className='list-card__description'>
+												ID и заголовок поста из GoREST API.
+											</p>
+										</div>
+
+										<label className='select-field'>
+											<span className='select-field__label'>На странице</span>
+											<select
+												className='select-field__control'
+												value={postsPerPage}
+												onChange={handlePostsPerPageChange}
+												disabled={isPostsLoading}
+											>
+												{PER_PAGE_OPTIONS.map(option => (
+													<option key={option} value={option}>
+														{option}
+													</option>
+												))}
+											</select>
+										</label>
+									</div>
+
+									{postsError ? (
+										<div className='state-message state-message--error'>
+											<p>{postsError}</p>
+											<Button
+												label='Повторить'
+												view='primary'
+												onClick={handleRetryPostsLoading}
+											/>
+										</div>
+									) : null}
+
+									{!postsError && isPostsLoading && posts.length === 0 ? (
+										<div className='state-message'>Загружаем посты...</div>
+									) : null}
+
+									{!postsError && !isPostsLoading && posts.length === 0 ? (
+										<div className='state-message'>Посты не найдены.</div>
+									) : null}
+
+									{!postsError && posts.length > 0 ? (
+										<>
+											<div className='table-wrapper'>
+												<table className='data-table'>
+													<thead>
+														<tr>
+															<th>ID</th>
+															<th>Заголовок</th>
+														</tr>
+													</thead>
+
+													<tbody>
+														{posts.map(post => (
+															<tr key={post.id}>
+																<td>{post.id}</td>
+																<td>{post.title || '—'}</td>
+															</tr>
+														))}
+													</tbody>
+												</table>
+											</div>
+
+											<footer className='pagination'>
+												<p className='pagination__info'>
+													Страница {postsPage} из {postsTotalPages}. Всего:{' '}
+													{postsPagination?.total ?? '—'}
+													{isPostsLoading ? ' · обновляем...' : ''}
+												</p>
+
+												<div className='pagination__actions'>
+													<Button
+														label='Предыдущая'
+														view='secondary'
+														disabled={!canGoToPreviousPostsPage}
+														onClick={() => {
+															const nextPage = Math.max(1, postsPage - 1)
+
+															setPostsPage(nextPage)
+															void loadPosts(
+																accessToken,
+																nextPage,
+																postsPerPage,
+															)
+														}}
+													/>
+
+													<Button
+														label='Следующая'
+														view='primary'
+														disabled={!canGoToNextPostsPage}
+														onClick={() => {
+															const nextPage = Math.min(
+																postsTotalPages,
+																postsPage + 1,
+															)
+
+															setPostsPage(nextPage)
+															void loadPosts(
+																accessToken,
+																nextPage,
+																postsPerPage,
+															)
+														}}
+													/>
+												</div>
+											</footer>
+										</>
+									) : null}
+								</section>
+							) : null}
+						</>
+					)}
 				</div>
 			</main>
 		)
