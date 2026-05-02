@@ -247,6 +247,12 @@
 	gap: 12px;
 }
 
+.section-switch {
+	display: flex;
+	gap: 12px;
+	margin-bottom: 24px;
+}
+
 @media (max-width: 1023px) {
 	.app {
 		padding: 24px;
@@ -283,6 +289,10 @@
 	}
 
 	.pagination__actions {
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+	}
+	.section-switch {
 		display: grid;
 		grid-template-columns: 1fr 1fr;
 	}
