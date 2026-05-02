@@ -1,73 +1,102 @@
-# React + TypeScript + Vite
+# Users & Posts Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Тестовое задание: React-приложение для работы с пользователями, постами и комментариями через GoREST API.
 
-Currently, two official plugins are available:
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Функциональность
 
-## React Compiler
+- Ввод access token для работы с GoREST API
+- Загрузка списка пользователей
+- Пагинация пользователей
+- Выбор количества пользователей на странице
+- Просмотр карточки пользователя
+- Загрузка списка постов
+- Пагинация постов
+- Выбор количества постов на странице
+- Просмотр карточки поста
+- Загрузка комментариев к посту
+- Обработка состояний загрузки и ошибок
+- Адаптивная верстка
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Стек
 
-## Expanding the ESLint configuration
+- React
+- TypeScript
+- Vite
+- Consta UI
+- GoREST API
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## API
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+Используется публичное API GoREST:
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+- `GET /public/v2/users`
+- `GET /public/v2/users/{id}`
+- `GET /public/v2/posts`
+- `GET /public/v2/posts/{id}`
+- `GET /public/v2/posts/{id}/comments`
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Для пагинации используются query-параметры:
+
+```txt
+page
+per_page
+````
+
+Данные пагинации берутся из response headers:
+
+```txt
+X-Pagination-Total
+X-Pagination-Pages
+X-Pagination-Page
+X-Pagination-Limit
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Access token
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+Для работы приложения нужен GoREST access token.
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+Токен не хранится в коде и не коммитится в репозиторий. Пользователь вводит его на стартовом экране приложения.
+
+Получить токен можно в личном кабинете GoREST.
+
+## Установка и запуск
+
+Склонировать репозиторий:
+
+```bash
+git clone https://github.com/VremeniNet/gazprom_task.git
+cd gazprom_task
+```
+
+Установить зависимости:
+
+```bash
+npm install
+```
+
+Запустить проект в режиме разработки:
+
+```bash
+npm run dev
+```
+
+Собрать проект:
+
+```bash
+npm run build
+```
+
+## Структура проекта
+
+```txt
+src/
+  api/
+    gorest.ts
+  types/
+    gorest.ts
+  App.tsx
+  App.css
+  main.tsx
+  index.css
 ```
