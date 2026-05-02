@@ -2,8 +2,20 @@ import { type FormEvent, type ChangeEvent, useState } from 'react'
 import { Button } from '@consta/uikit/Button'
 import { TextField } from '@consta/uikit/TextField'
 
-import { getPosts, getUser, getUsers, GoRestApiError } from './api/gorest'
-import type { Pagination, Post, User } from './types/gorest'
+import {
+	getPost,
+	getPostComments,
+	getPosts,
+	getUser,
+	getUsers,
+	GoRestApiError,
+} from './api/gorest'
+import type {
+	Comment as PostComment,
+	Pagination,
+	Post,
+	User,
+} from './types/gorest'
 
 import './App.css'
 
@@ -36,6 +48,12 @@ function App() {
 	const [postsPerPage, setPostsPerPage] = useState<PerPageOption>(10)
 	const [isPostsLoading, setIsPostsLoading] = useState(false)
 	const [postsError, setPostsError] = useState('')
+
+	const [selectedPostId, setSelectedPostId] = useState<number | null>(null)
+	const [selectedPost, setSelectedPost] = useState<Post | null>(null)
+	const [postComments, setPostComments] = useState<PostComment[]>([])
+	const [isPostDetailsLoading, setIsPostDetailsLoading] = useState(false)
+	const [postDetailsError, setPostDetailsError] = useState('')
 
 	const [users, setUsers] = useState<User[]>([])
 	const [usersPagination, setUsersPagination] = useState<Pagination | null>(
@@ -81,6 +99,10 @@ function App() {
 	}
 
 	const loadUserDetails = async (tokenForRequest: string, userId: number) => {
+		setSelectedPostId(null)
+		setSelectedPost(null)
+		setPostComments([])
+		setPostDetailsError('')
 		setSelectedUserId(userId)
 		setSelectedUser(null)
 		setIsUserDetailsLoading(true)
@@ -136,6 +158,43 @@ function App() {
 		}
 	}
 
+	const loadPostDetails = async (tokenForRequest: string, postId: number) => {
+		setSelectedUserId(null)
+		setSelectedUser(null)
+		setUserDetailsError('')
+
+		setSelectedPostId(postId)
+		setSelectedPost(null)
+		setPostComments([])
+		setIsPostDetailsLoading(true)
+		setPostDetailsError('')
+
+		try {
+			const [postResult, commentsResult] = await Promise.all([
+				getPost({
+					token: tokenForRequest,
+					id: postId,
+				}),
+				getPostComments({
+					token: tokenForRequest,
+					id: postId,
+				}),
+			])
+
+			setSelectedPost(postResult.data)
+			setPostComments(commentsResult.data)
+		} catch (error) {
+			if (error instanceof GoRestApiError) {
+				setPostDetailsError(error.message)
+				return
+			}
+
+			setPostDetailsError('Не удалось загрузить пост. Попробуйте позже.')
+		} finally {
+			setIsPostDetailsLoading(false)
+		}
+	}
+
 	const handleActiveSectionChange = (nextSection: ActiveSection) => {
 		setActiveSection(nextSection)
 
@@ -176,6 +235,10 @@ function App() {
 		setSelectedUserId(null)
 		setSelectedUser(null)
 		setUserDetailsError('')
+		setSelectedPostId(null)
+		setSelectedPost(null)
+		setPostComments([])
+		setPostDetailsError('')
 	}
 
 	const handleUsersPerPageChange = (event: ChangeEvent<HTMLSelectElement>) => {
@@ -224,6 +287,19 @@ function App() {
 		setUserDetailsError('')
 	}
 
+	const handlePostRowClick = (postId: number) => {
+		if (accessToken) {
+			void loadPostDetails(accessToken, postId)
+		}
+	}
+
+	const handleBackToPostsList = () => {
+		setSelectedPostId(null)
+		setSelectedPost(null)
+		setPostComments([])
+		setPostDetailsError('')
+	}
+
 	const usersTotalPages = usersPagination?.pages ?? 1
 	const canGoToPreviousUsersPage = usersPage > 1 && !isUsersLoading
 	const canGoToNextUsersPage = usersPage < usersTotalPages && !isUsersLoading
@@ -239,10 +315,10 @@ function App() {
 					<header className='dashboard__header'>
 						<div>
 							<p className='app__eyebrow'>GoREST API</p>
-							<h1 className='dashboard__title'>Пользователи</h1>
+							<h1 className='dashboard__title'>Пользователи и Посты</h1>
 							<p className='dashboard__description'>
-								Список пользователей загружается из GoREST API с учётом
-								пагинации.
+								Работа со списками пользователей, постами и карточками деталей
+								через GoREST API.
 							</p>
 						</div>
 
@@ -332,6 +408,101 @@ function App() {
 										</span>
 									</div>
 								</div>
+							) : null}
+						</section>
+					) : selectedPostId !== null ? (
+						<section className='details-card'>
+							<div className='details-card__header'>
+								<div>
+									<p className='app__eyebrow'>Карточка поста</p>
+									<h2 className='details-card__title'>Детали поста</h2>
+								</div>
+
+								<Button
+									label='Назад к списку'
+									view='secondary'
+									onClick={handleBackToPostsList}
+								/>
+							</div>
+
+							{isPostDetailsLoading ? (
+								<div className='state-message'>Загружаем пост...</div>
+							) : null}
+
+							{postDetailsError ? (
+								<div className='state-message state-message--error'>
+									<p>{postDetailsError}</p>
+									<Button
+										label='Повторить'
+										view='primary'
+										onClick={() => {
+											if (selectedPostId !== null) {
+												void loadPostDetails(accessToken, selectedPostId)
+											}
+										}}
+									/>
+								</div>
+							) : null}
+
+							{selectedPost && !isPostDetailsLoading && !postDetailsError ? (
+								<>
+									<div className='details-grid'>
+										<div className='details-field'>
+											<span className='details-field__label'>ID поста</span>
+											<strong className='details-field__value'>
+												{selectedPost.id}
+											</strong>
+										</div>
+
+										<div className='details-field'>
+											<span className='details-field__label'>
+												ID пользователя
+											</span>
+											<strong className='details-field__value'>
+												{selectedPost.user_id}
+											</strong>
+										</div>
+									</div>
+
+									<div className='post-content'>
+										<h3 className='post-content__title'>
+											{selectedPost.title}
+										</h3>
+										<p className='post-content__body'>{selectedPost.body}</p>
+									</div>
+
+									<section className='comments-section'>
+										<div className='comments-section__header'>
+											<h3 className='comments-section__title'>Комментарии</h3>
+											<span className='comments-section__count'>
+												{postComments.length}
+											</span>
+										</div>
+
+										{postComments.length > 0 ? (
+											<div className='comments-list'>
+												{postComments.map(comment => (
+													<article key={comment.id} className='comment-card'>
+														<div className='comment-card__header'>
+															<strong className='comment-card__author'>
+																{comment.name || 'Без имени'}
+															</strong>
+															<span className='comment-card__email'>
+																{comment.email || '—'}
+															</span>
+														</div>
+
+														<p className='comment-card__body'>{comment.body}</p>
+													</article>
+												))}
+											</div>
+										) : (
+											<div className='state-message'>
+												Комментариев пока нет.
+											</div>
+										)}
+									</section>
+								</>
 							) : null}
 						</section>
 					) : (
@@ -567,7 +738,21 @@ function App() {
 
 													<tbody>
 														{posts.map(post => (
-															<tr key={post.id}>
+															<tr
+																key={post.id}
+																className='data-table__row data-table__row--clickable'
+																tabIndex={0}
+																onClick={() => handlePostRowClick(post.id)}
+																onKeyDown={event => {
+																	if (
+																		event.key === 'Enter' ||
+																		event.key === ' '
+																	) {
+																		event.preventDefault()
+																		handlePostRowClick(post.id)
+																	}
+																}}
+															>
 																<td>{post.id}</td>
 																<td>{post.title || '—'}</td>
 															</tr>
